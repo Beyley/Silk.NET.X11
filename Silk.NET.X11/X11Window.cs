@@ -153,7 +153,7 @@ public unsafe class X11Window : WindowImplementationBase {
 		this._display = X11Provider.InitOrGetX11Display();
 
 		int s = Xlib.DefaultScreen(this._display);
-		this._window = Xlib.XCreateSimpleWindow(this._display, Xlib.RootWindow(this._display, s), 10, 10, 800, 600, 1, Xlib.BlackPixel(this._display, s), Xlib.BlackPixel(this._display, s));
+		this._window = Xlib.XCreateSimpleWindow(this._display, Xlib.RootWindow(this._display, s), opts.Position.X, opts.Position.Y, (uint)opts.Size.X, (uint)opts.Size.Y, 1, Xlib.BlackPixel(this._display, s), Xlib.BlackPixel(this._display, s));
 
 		if (this._window == Window.NULL)
 			throw new PlatformException();
@@ -170,6 +170,7 @@ public unsafe class X11Window : WindowImplementationBase {
 
 		nint ptr            = SilkMarshal.StringToPtr("WM_DELETE_WINDOW");
 		Atom wmDeleteWindow = Xlib.XInternAtom(this._display, (sbyte*)ptr, 0);
+		SilkMarshal.FreeString(ptr);
 		result               = Xlib.XSetWMProtocols(this._display, this._window, &wmDeleteWindow, 1);
 		this._wmDeleteWindow = wmDeleteWindow;
 		

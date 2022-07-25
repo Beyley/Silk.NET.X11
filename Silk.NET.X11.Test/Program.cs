@@ -1,4 +1,5 @@
 ﻿using Silk.NET.Core.Native;
+using Silk.NET.Maths;
 using Silk.NET.Windowing;
 using Silk.NET.X11;
 using TerraFX.Interop.Xlib;
@@ -7,6 +8,8 @@ using Window = Silk.NET.Windowing.Window;
 X11Platform.GetOrRegister();
 
 WindowOptions options = WindowOptions.Default;
+
+options.Size = new Vector2D<int>(800, 600);
 
 X11Window window = (X11Window)Window.Create(options);
 
