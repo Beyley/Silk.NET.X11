@@ -1,3 +1,4 @@
+using System.Reflection;
 using Silk.NET.Core;
 using Silk.NET.Core.Contexts;
 using Silk.NET.Core.Native;
@@ -15,6 +16,7 @@ public unsafe class X11Window : WindowImplementationBase {
 	private Queue<XEvent> _eventQueue = new();
 	private INativeWindow _native;
 	private Atom          _wmDeleteWindow;
+	private string        _windowClass;
 
 	public X11Window(WindowOptions optionsCache) : base(optionsCache) {}
 	protected override Vector2D<int> CoreSize {
@@ -112,6 +114,7 @@ public unsafe class X11Window : WindowImplementationBase {
 	public override event Action<Vector2D<int>>? FramebufferResize;
 	public override event Action?                Closing;
 	public override event Action<bool>?          FocusChanged;
+	
 	protected override bool CoreIsVisible {
 		get;
 		set;
@@ -143,6 +146,9 @@ public unsafe class X11Window : WindowImplementationBase {
 	}
 	protected override void CoreInitialize(WindowOptions opts) {
 		int result;
+
+		if (opts.API.API == ContextAPI.Vulkan)
+			throw new NotSupportedException();
 		
 		this._display = X11Provider.InitOrGetX11Display();
 
@@ -152,7 +158,7 @@ public unsafe class X11Window : WindowImplementationBase {
 		if (this._window == Window.NULL)
 			throw new PlatformException();
 
-		result = Xlib.XSelectInput(this._display, this._window, Xlib.ExposureMask | Xlib.KeyPressMask);
+		result = Xlib.XSelectInput(this._display, this._window, Xlib.KeyPressMask | Xlib.KeyReleaseMask);
 		
 		// if (result != 0)
 		// throw new PlatformException();
@@ -169,6 +175,30 @@ public unsafe class X11Window : WindowImplementationBase {
 		
 		// if (result != 0)
 		// throw new PlatformException();
+
+		#region set class and class name
+		this._windowClass = opts.WindowClass ?? "defaultwindowclass";
+
+		nint classPtr = SilkMarshal.StringToPtr(this._windowClass);
+		nint namePtr  = SilkMarshal.StringToPtr(Assembly.GetEntryAssembly()!.FullName);
+
+		XClassHint* classHint = Xlib.XAllocClassHint();
+		classHint->res_class = (sbyte*)classPtr;
+		classHint->res_name  = (sbyte*)namePtr;
+		Xlib.XSetClassHint(this._display, this._window, classHint);
+		Xlib.XFree(classHint);
+		
+		SilkMarshal.FreeString(classPtr);
+		SilkMarshal.FreeString(namePtr);
+		#endregion
+		
+		#region set window title
+		nint titlePtr = SilkMarshal.StringToPtr(opts.Title);
+
+		Xlib.XStoreName(this._display, this._window, (sbyte*)titlePtr);
+		
+		SilkMarshal.FreeString(titlePtr);
+		#endregion
 
 		this._native = new X11NativeWindow(this._display, this._window);
 	}
