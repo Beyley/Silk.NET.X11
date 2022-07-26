@@ -4,6 +4,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Silk.NET.X11", "Silk.NET.X1
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Silk.NET.X11.Test", "Silk.NET.X11.Test\Silk.NET.X11.Test.csproj", "{D5B2A503-C12B-46DC-8C20-05AE1679629C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Silk.NET.GLX", "Silk.NET.GLX\Silk.NET.GLX.csproj", "{3AF3EB1F-4CB8-47CC-BB47-5FE4519DB435}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +20,9 @@ Global
 		{D5B2A503-C12B-46DC-8C20-05AE1679629C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D5B2A503-C12B-46DC-8C20-05AE1679629C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D5B2A503-C12B-46DC-8C20-05AE1679629C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3AF3EB1F-4CB8-47CC-BB47-5FE4519DB435}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3AF3EB1F-4CB8-47CC-BB47-5FE4519DB435}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3AF3EB1F-4CB8-47CC-BB47-5FE4519DB435}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3AF3EB1F-4CB8-47CC-BB47-5FE4519DB435}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

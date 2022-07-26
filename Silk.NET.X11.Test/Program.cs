@@ -8,6 +8,7 @@ using Window = Silk.NET.Windowing.Window;
 X11Platform.GetOrRegister();
 
 WindowOptions options = WindowOptions.Default;
+options.API = GraphicsAPI.None;
 
 options.Size = new Vector2D<int>(800, 600);
 

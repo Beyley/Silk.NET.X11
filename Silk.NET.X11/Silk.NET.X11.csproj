@@ -13,4 +13,8 @@
       <PackageReference Include="TerraFX.Interop.Xlib" Version="6.3.0-beta3" />
     </ItemGroup>
 
+    <ItemGroup>
+      <ProjectReference Include="..\Silk.NET.GLX\Silk.NET.GLX.csproj" />
+    </ItemGroup>
+
 </Project>

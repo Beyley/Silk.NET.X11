@@ -6,12 +6,13 @@ using Silk.NET.Maths;
 using Silk.NET.Windowing;
 using TerraFX.Interop.Xlib;
 using Window = TerraFX.Interop.Xlib.Window;
+using Silk.NET.GLX;
 
 namespace Silk.NET.X11; 
 
 public unsafe class X11Window : WindowImplementationBase {
-	public Window   _window;
-	public Display* _display;
+	public Window   Window;
+	public Display* Display;
 	
 	private Queue<XEvent> _eventQueue = new();
 	private INativeWindow _native;
@@ -25,9 +26,10 @@ public unsafe class X11Window : WindowImplementationBase {
 	protected override nint CoreHandle {
 		get;
 	}
-	protected override bool CoreIsClosing {
-		get;
-	}
+	
+	protected override bool CoreIsClosing => this._isClosing;
+	private            bool _isClosing = false;
+	
 	protected override IGLContext? CoreGLContext {
 		get;
 	}
@@ -35,15 +37,15 @@ public unsafe class X11Window : WindowImplementationBase {
 		get;
 	}
 	protected override void CoreReset() {
-		if (this._window == Window.NULL)
+		if (this.Window == Window.NULL)
 			return;
 
-		int result = Xlib.XUnmapWindow(this._display, this._window);
+		int result = Xlib.XUnmapWindow(this.Display, this.Window);
 		
 		// if (result != 0)
 		// throw new PlatformException();
 		
-		result = Xlib.XDestroyWindow(this._display, this._window);
+		result = Xlib.XDestroyWindow(this.Display, this.Window);
 
 		// if (result != 0)
 		// throw new PlatformException();
@@ -63,16 +65,16 @@ public unsafe class X11Window : WindowImplementationBase {
 
 		XEvent e;
 		if (this.IsEventDriven) {
-			if (Xlib.XPending(this._display) != 0) {
-				if (Xlib.XNextEvent(this._display, &e) != 0)
+			if (Xlib.XPending(this.Display) != 0) {
+				if (Xlib.XNextEvent(this.Display, &e) != 0)
 					throw new PlatformException();
 
 				this._eventQueue.Enqueue(e);
 			}
 		}
 		else {
-			while (Xlib.XPending(this._display) != 0) {
-				if (Xlib.XNextEvent(this._display, &e) != 0)
+			while (Xlib.XPending(this.Display) != 0) {
+				if (Xlib.XNextEvent(this.Display, &e) != 0)
 					throw new PlatformException();
 			
 				Console.WriteLine($"Enqueuing events!");
@@ -99,6 +101,7 @@ public unsafe class X11Window : WindowImplementationBase {
 	}
 	public override void Close() {
 		this.Closing?.Invoke();
+		this._isClosing = true;
 		this.CoreReset();		
 	}
 	protected override void RegisterCallbacks() {
@@ -147,31 +150,78 @@ public unsafe class X11Window : WindowImplementationBase {
 	protected override void CoreInitialize(WindowOptions opts) {
 		int result;
 
+		this._isClosing = false;
+		
 		if (opts.API.API == ContextAPI.Vulkan)
 			throw new NotSupportedException();
 		
-		this._display = X11Provider.InitOrGetX11Display();
+		this.Display = X11Provider.InitOrGetX11Display();
 
-		int s = Xlib.DefaultScreen(this._display);
-		this._window = Xlib.XCreateSimpleWindow(this._display, Xlib.RootWindow(this._display, s), opts.Position.X, opts.Position.Y, (uint)opts.Size.X, (uint)opts.Size.Y, 1, Xlib.BlackPixel(this._display, s), Xlib.BlackPixel(this._display, s));
+		int defaultScreen = Xlib.DefaultScreen(this.Display);
 
-		if (this._window == Window.NULL)
+		Visual* visual = null;
+
+		if (opts.API.API == ContextAPI.OpenGL) {
+			List<int> attributes = new();
+			attributes.Add(glX.GLX_RGBA);
+
+			// attributes.Add(glX.GLX_DOUBLEBUFFER); 
+			// attributes.Add(glX.GLX_NONE);
+			
+			if (opts.PreferredDepthBufferBits.HasValue) {
+				attributes.Add(glX.GLX_DEPTH_SIZE);
+				attributes.Add(opts.PreferredDepthBufferBits.Value);
+			}
+			if (opts.PreferredStencilBufferBits.HasValue) {
+				attributes.Add(glX.GLX_STENCIL_SIZE);
+				attributes.Add(opts.PreferredStencilBufferBits.Value);
+			}
+
+			int[] att = attributes.ToArray();
+			
+			fixed(int* attPtr = att) {
+				XVisualInfo* visualInfo = glX.glXChooseVisual(this.Display, defaultScreen, attPtr);
+
+				if (visualInfo == null) {
+					throw new PlatformException("No suitable visual found, check your PrefferedDepthBufferBits and PrefferedStencilBufferBits!");
+				}
+				
+				visual = visualInfo->visual;
+			}
+		}
+		else {
+			visual = Xlib.DefaultVisual(this.Display, defaultScreen);
+		}
+
+		if (visual == null)
+			throw new PlatformException("No suitable visual found!");
+
+		Window rootWindow = Xlib.RootWindow(this.Display, defaultScreen);
+		
+		Colormap colorMap = Xlib.XCreateColormap(this.Display, rootWindow, visual, Xlib.AllocNone);
+
+		XSetWindowAttributes windowAttributes = new() {
+			colormap   = colorMap,
+			event_mask = Xlib.KeyPressMask | Xlib.KeyReleaseMask
+		};
+
+		this.Window = Xlib.XCreateWindow(this.Display, rootWindow, opts.Position.X, opts.Position.Y, (uint)opts.Size.X, (uint)opts.Size.Y, 1, (int)Xlib.CopyFromParent, (uint)Xlib.CopyFromParent, visual, 0, &windowAttributes);
+
+		if (this.Window == Window.NULL)
 			throw new PlatformException();
 
-		result = Xlib.XSelectInput(this._display, this._window, Xlib.KeyPressMask | Xlib.KeyReleaseMask);
-		
 		// if (result != 0)
 		// throw new PlatformException();
 		
-		result = Xlib.XMapWindow(this._display, this._window);
+		result = Xlib.XMapWindow(this.Display, this.Window);
 
 		// if (result != 0)
 		// throw new PlatformException();
 
 		nint ptr            = SilkMarshal.StringToPtr("WM_DELETE_WINDOW");
-		Atom wmDeleteWindow = Xlib.XInternAtom(this._display, (sbyte*)ptr, 0);
+		Atom wmDeleteWindow = Xlib.XInternAtom(this.Display, (sbyte*)ptr, 0);
 		SilkMarshal.FreeString(ptr);
-		result               = Xlib.XSetWMProtocols(this._display, this._window, &wmDeleteWindow, 1);
+		result               = Xlib.XSetWMProtocols(this.Display, this.Window, &wmDeleteWindow, 1);
 		this._wmDeleteWindow = wmDeleteWindow;
 		
 		// if (result != 0)
@@ -186,7 +236,7 @@ public unsafe class X11Window : WindowImplementationBase {
 		XClassHint* classHint = Xlib.XAllocClassHint();
 		classHint->res_class = (sbyte*)classPtr;
 		classHint->res_name  = (sbyte*)namePtr;
-		Xlib.XSetClassHint(this._display, this._window, classHint);
+		Xlib.XSetClassHint(this.Display, this.Window, classHint);
 		Xlib.XFree(classHint);
 		
 		SilkMarshal.FreeString(classPtr);
@@ -196,12 +246,12 @@ public unsafe class X11Window : WindowImplementationBase {
 		#region set window title
 		nint titlePtr = SilkMarshal.StringToPtr(opts.Title);
 
-		Xlib.XStoreName(this._display, this._window, (sbyte*)titlePtr);
+		Xlib.XStoreName(this.Display, this.Window, (sbyte*)titlePtr);
 		
 		SilkMarshal.FreeString(titlePtr);
 		#endregion
 
-		this._native = new X11NativeWindow(this._display, this._window);
+		this._native = new X11NativeWindow(this.Display, this.Window);
 	}
 	public override event Action<Vector2D<int>>? Move;
 	public override event Action<WindowState>?   StateChanged;
