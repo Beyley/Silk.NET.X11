@@ -4,8 +4,10 @@ using TerraFX.Interop.Xlib;
 
 namespace Silk.NET.GLX
 {
-    public static unsafe partial class glX
-    {
+    public static unsafe partial class glX {
+        [DllImport("GLX", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void glXSwapIntervalEXT(Display* dpy, UIntPtr drawable, int interval);
+        
         [DllImport("GLX", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         public static extern XVisualInfo* glXChooseVisual([NativeTypeName("Display *")] Display* dpy, int screen, int* attribList);
 

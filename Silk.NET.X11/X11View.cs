@@ -15,6 +15,7 @@ public unsafe class X11View : ViewImplementationBase {
 	}
 	protected override Vector2D<int> CoreSize {
 		get;
+		set;
 	}
 	protected override nint CoreHandle {
 		get;

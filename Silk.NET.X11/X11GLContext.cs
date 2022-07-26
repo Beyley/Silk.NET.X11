@@ -1,18 +1,25 @@
 using Silk.NET.Core.Contexts;
 using Silk.NET.Core.Native;
 using Silk.NET.GLX;
+using Silk.NET.GLX.EXT;
+using TerraFX.Interop.Xlib;
 
 namespace Silk.NET.X11; 
 
-public class X11GLContext : IGLContext {
-	private readonly X11Window _window;
-	
+public unsafe class X11GLContext : IGLContext {
+	private readonly X11Window        _window;
+	private          __GLXcontextRec* _glContext;
+
 	public X11GLContext(X11Window window) {
 		this._window = window;
+
+		this._glContext = glX.glXCreateContext(window.Display, window.VisualInfo, null, 1);
 	}
 	
 	public void Dispose() {
-		// throw new NotImplementedException();
+		glX.glXDestroyContext(this._window.Display, this._glContext);
+
+		this._glContext = null;
 	}
 	public unsafe nint GetProcAddress(string proc, int? slot = null) {
 		// throw new NotImplementedException();
@@ -29,13 +36,14 @@ public class X11GLContext : IGLContext {
 		return addr != 0;
 	}
 	public void SwapInterval(int interval) {
-		
+		//fuck vsync all my homies hate vsync
+		// glXExt.glXSwapIntervalEXT(this._window.Display, this._window.Window, interval);
 	}
 	public void SwapBuffers() {
-		
+		glX.glXSwapBuffers(this._window.Display, this._window.Window);
 	}
 	public void MakeCurrent() {
-		
+		glX.glXMakeCurrent(this._window.Display, this._window.Window, this._glContext);
 	}
 	public void Clear() {
 		

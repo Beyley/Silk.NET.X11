@@ -45,7 +45,7 @@ public abstract class ViewImplementationBase : IView {
 	}
 
 	// Property bases - these have extra functionality baked into their getters and setters
-	protected abstract Vector2D<int> CoreSize      { get; }
+	protected abstract Vector2D<int> CoreSize      { get; set; }
 	protected abstract nint          CoreHandle    { get; }
 	protected abstract bool          CoreIsClosing { get; }
 	protected abstract IGLContext?   CoreGLContext { get; }

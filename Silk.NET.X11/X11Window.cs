@@ -11,9 +11,10 @@ using Silk.NET.GLX;
 namespace Silk.NET.X11; 
 
 public unsafe class X11Window : WindowImplementationBase {
-	public Window   Window;
-	public Display* Display;
-	
+	public Window       Window;
+	public Display*     Display;
+	public XVisualInfo* VisualInfo = null;
+
 	private Queue<XEvent> _eventQueue = new();
 	private INativeWindow _native;
 	private Atom          _wmDeleteWindow;
@@ -22,17 +23,18 @@ public unsafe class X11Window : WindowImplementationBase {
 	public X11Window(WindowOptions optionsCache) : base(optionsCache) {}
 	protected override Vector2D<int> CoreSize {
 		get;
+		set;
 	}
 	protected override nint CoreHandle {
 		get;
 	}
 	
-	protected override bool CoreIsClosing => this._isClosing;
-	private            bool _isClosing = false;
-	
-	protected override IGLContext? CoreGLContext {
-		get;
-	}
+	protected override bool         CoreIsClosing => this._isClosing;
+	private            bool         _isClosing  = false;
+
+	private            X11GLContext? _x11GlContext;
+	protected override IGLContext?   CoreGLContext => this._x11GlContext ??= new X11GLContext(this);
+
 	protected override IVkSurface? CoreVkSurface {
 		get;
 	}
@@ -40,15 +42,17 @@ public unsafe class X11Window : WindowImplementationBase {
 		if (this.Window == Window.NULL)
 			return;
 
+		this._x11GlContext?.Dispose();
+
 		int result = Xlib.XUnmapWindow(this.Display, this.Window);
 		
 		// if (result != 0)
-		// throw new PlatformException();
+			// throw new PlatformException();
 		
 		result = Xlib.XDestroyWindow(this.Display, this.Window);
 
 		// if (result != 0)
-		// throw new PlatformException();
+			// throw new PlatformException();
 	}
 	public override VideoMode VideoMode {
 		get;
@@ -93,6 +97,13 @@ public unsafe class X11Window : WindowImplementationBase {
 				e.xclient.data.l[0] == this._wmDeleteWindow) {
 				this.Close();
 			}
+			if (e.type == Xlib.ConfigureNotify) {
+				if (e.xconfigure.width != this.Size.X || e.xconfigure.height != this.Size.Y) {
+					Console.WriteLine($"Window size changed!");
+					this.CoreSize = new Vector2D<int>(e.xconfigure.width, e.xconfigure.height);
+					this.Resize?.Invoke(this.CoreSize);
+				}
+			}
 			Console.WriteLine(e.type);
 		}
 	}
@@ -100,9 +111,9 @@ public unsafe class X11Window : WindowImplementationBase {
 		// throw new NotImplementedException();
 	}
 	public override void Close() {
+		this.CoreReset();		
 		this.Closing?.Invoke();
 		this._isClosing = true;
-		this.CoreReset();		
 	}
 	protected override void RegisterCallbacks() {
 		// throw new NotImplementedException();
@@ -159,15 +170,19 @@ public unsafe class X11Window : WindowImplementationBase {
 
 		int defaultScreen = Xlib.DefaultScreen(this.Display);
 
+		List<string> requiredGlxExtensions = new();
+		
 		Visual* visual = null;
 
-		if (opts.API.API == ContextAPI.OpenGL) {
+		if (opts.API.API is ContextAPI.OpenGL or ContextAPI.OpenGLES) {
+			requiredGlxExtensions.Add("GLX_EXT_swap_control");
+			
 			List<int> attributes = new();
 			attributes.Add(glX.GLX_RGBA);
 
 			// attributes.Add(glX.GLX_DOUBLEBUFFER); 
 			// attributes.Add(glX.GLX_NONE);
-			
+
 			if (opts.PreferredDepthBufferBits.HasValue) {
 				attributes.Add(glX.GLX_DEPTH_SIZE);
 				attributes.Add(opts.PreferredDepthBufferBits.Value);
@@ -182,11 +197,12 @@ public unsafe class X11Window : WindowImplementationBase {
 			fixed(int* attPtr = att) {
 				XVisualInfo* visualInfo = glX.glXChooseVisual(this.Display, defaultScreen, attPtr);
 
-				if (visualInfo == null) {
+				this.VisualInfo = visualInfo;
+				if (this.VisualInfo == null) {
 					throw new PlatformException("No suitable visual found, check your PrefferedDepthBufferBits and PrefferedStencilBufferBits!");
 				}
 				
-				visual = visualInfo->visual;
+				visual = this.VisualInfo->visual;
 			}
 		}
 		else {
@@ -196,16 +212,29 @@ public unsafe class X11Window : WindowImplementationBase {
 		if (visual == null)
 			throw new PlatformException("No suitable visual found!");
 
+		#region Check for GLX extensions
+		sbyte* glxExtensions          = glX.glXQueryExtensionsString(this.Display, defaultScreen);
+		string availableGlxExtensions = SilkMarshal.PtrToString((nint)glxExtensions)!;
+		
+		foreach (string extension in requiredGlxExtensions) {
+			if(!availableGlxExtensions.Contains(extension))
+				throw new PlatformException($"Required GLX extension {extension} not found!");
+		}
+		Xlib.XFree(glxExtensions);
+		#endregion
+		
 		Window rootWindow = Xlib.RootWindow(this.Display, defaultScreen);
 		
 		Colormap colorMap = Xlib.XCreateColormap(this.Display, rootWindow, visual, Xlib.AllocNone);
 
 		XSetWindowAttributes windowAttributes = new() {
 			colormap   = colorMap,
-			event_mask = Xlib.KeyPressMask | Xlib.KeyReleaseMask
+			event_mask = Xlib.KeyPressMask | Xlib.KeyReleaseMask | Xlib.StructureNotifyMask
 		};
 
-		this.Window = Xlib.XCreateWindow(this.Display, rootWindow, opts.Position.X, opts.Position.Y, (uint)opts.Size.X, (uint)opts.Size.Y, 1, (int)Xlib.CopyFromParent, (uint)Xlib.CopyFromParent, visual, 0, &windowAttributes);
+		int depth = this.VisualInfo == null ? (int)Xlib.CopyFromParent : this.VisualInfo->depth;
+		
+		this.Window = Xlib.XCreateWindow(this.Display, rootWindow, opts.Position.X, opts.Position.Y, (uint)opts.Size.X, (uint)opts.Size.Y, 0, depth, Xlib.InputOutput, visual, (nuint)(Xlib.CWColormap | Xlib.CWEventMask), &windowAttributes);
 
 		if (this.Window == Window.NULL)
 			throw new PlatformException();
@@ -252,6 +281,9 @@ public unsafe class X11Window : WindowImplementationBase {
 		#endregion
 
 		this._native = new X11NativeWindow(this.Display, this.Window);
+
+		this.CoreSize      = opts.Size;
+		this.IsInitialized = true;
 	}
 	public override event Action<Vector2D<int>>? Move;
 	public override event Action<WindowState>?   StateChanged;
